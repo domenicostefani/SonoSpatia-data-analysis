@@ -35,7 +35,7 @@ for line in plines[1:]:
 print("Loaded data")
 
 
-PARALLEL_PCA = False
+PARALLEL_PCA = True
 SERIES_PCA = True
 
 if PARALLEL_PCA:
@@ -90,7 +90,8 @@ if PARALLEL_PCA:
                 ax.bar(range(1, dimensions+1), pca.explained_variance_ratio_)
             ax.set_xlabel('Principal component')
             ax.set_ylabel('Explained variance ratio')
-            ax.set_title('PCA explained variance\np' + cur_player + ' '+type2D3D+' started with ' + cur_startedwith)
+            titll = 'PCA explained variance\np' + cur_player + ' '+type2D3D+' started with ' + cur_startedwith
+            ax.set_title(titll)
             max_explained_variance = max(max_explained_variance, np.max(pca.explained_variance_ratio_))
 
 
@@ -100,4 +101,10 @@ if PARALLEL_PCA:
 
         ax1.set_ylim([0, max_explained_variance*1.15])
         ax2.set_ylim([0, max_explained_variance*1.15])
-        plt.show()
+
+        import os
+        if not os.path.exists('plots/pcas'):
+            os.makedirs('plots/pcas')
+        plt.savefig('plots/pcas/PCA_explained_variance_'+cur_player+'.png')
+        # os.system('')
+        # plt.show()
