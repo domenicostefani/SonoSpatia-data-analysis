@@ -31,7 +31,6 @@ PARTICIPANTS = list(per_participant_automation_dict.keys())
 # Sort by int id, not string. IDs are of the form ID1, ID2, ..., ID12
 PARTICIPANTS.sort(key=lambda x: int(x[2:]))
 
-
 results = {}
 # 
 for participant in PARTICIPANTS:
@@ -41,14 +40,23 @@ for participant in PARTICIPANTS:
 
     cur_results = results[participant] = {}
 
-    for track in cur_automation_dict_2D:
+    all_tracks = set(cur_automation_dict_2D.keys()).union(set(cur_automation_dict_3D.keys()))
+    assert len(all_tracks) == 5, 'Expected 5 tracks, found {}'.format(len(all_tracks))
+
+    for track in all_tracks: #cur_automation_dict_2D:
 
         cur_results_track = cur_results[track] = {}
 
         print('  Processing track',track)
         assert track in cur_automation_dict_3D, 'Track not found in 3D automation'
+        assert track in cur_automation_dict_2D, 'Track not found in 2D automation'
 
-        for automation_idx in range(len(cur_automation_dict_2D[track])):
+        all_dimension_automations = set([e['name'] for e in cur_automation_dict_2D[track]]).union(set([e['name'] for e in cur_automation_dict_3D[track]]))
+
+        assert len(all_dimension_automations) == 3, 'Expected 3 dimensions, found {}'.format(len(all_dimension_automations))
+        assert len(cur_automation_dict_2D[track]) == 3, 'Expected 3 dimensions in 2D automations, found {}'.format(len(cur_automation_dict_2D[track]))
+        assert len(cur_automation_dict_3D[track]) == 3, 'Expected 3 dimensions in 3D automations, found {}'.format(len(cur_automation_dict_3D[track]))
+        for automation_idx in range(3):
             # TODO: THERE IS A BUG HERE (But not for our case)
             # If you skip automation X or Y, index will be different
             assert cur_automation_dict_2D[track][automation_idx]['name'] == cur_automation_dict_3D[track][automation_idx]['name'], 'Automation name mismatch, fix code to cycle through names instead of indexes'
