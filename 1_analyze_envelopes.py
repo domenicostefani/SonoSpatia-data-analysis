@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
+EXPERIMENT_TYPES = ['2D', '3D_DTW','3D_old_noDTW']
+ENDFILE_SECONDS = 29.538 # End of task in seconds, throw away subsequent points
 
 with open('extracted_envelopes.pickle', 'rb') as f:
     per_participant_automation_dict = pickle.load(f)
@@ -27,6 +29,7 @@ with open('extracted_envelopes.pickle', 'rb') as f:
 # list
 
 PARTICIPANTS = list(per_participant_automation_dict.keys())
+
 
 # Sort by int id, not string. IDs are of the form ID1, ID2, ..., ID12
 PARTICIPANTS.sort(key=lambda x: int(x[2:]))
@@ -72,6 +75,9 @@ for participant in PARTICIPANTS:
             T_toplot_2D, V_toplot_2D = get_point_list_from_automation(cur_automation_dict_2D[track][automation_idx])
             T_toplot_3D, V_toplot_3D = get_point_list_from_automation(cur_automation_dict_3D[track][automation_idx])
 
+            # assert np.less_equal(T_toplot_2D, ENDFILE_SECONDS).all(), '2D Envelope {} for track {}, participant {} contains time values greater than {:f} ({:f}>{:f})'.format(name, track, participant,ENDFILE_SECONDS,max(T_toplot_2D),ENDFILE_SECONDS)
+            # assert np.less_equal(T_toplot_3D, ENDFILE_SECONDS).all(), '3D Envelope {} for track {}, participant {} contains time values greater than {:f} ({:f}>{:f})'.format(name, track, participant,ENDFILE_SECONDS,max(T_toplot_3D),ENDFILE_SECONDS)
+
             assert not np.any(np.isnan(V_toplot_2D)), 'V_toplot_2D contains NaNs'
             assert not np.any(np.isnan(V_toplot_3D)), 'V_toplot_3D contains NaNs'
             assert not np.any(np.isnan(T_toplot_2D)), 'T_toplot_2D contains NaNs'
@@ -97,14 +103,14 @@ for participant in PARTICIPANTS:
 
             # Before interpolating we solve issues with 1-element arrays.
             # We do so by adding a point at the end of the array with the same value as the last point and at time 30ms (end of task)
-            if len(T_toplot_2D) == 1:
-                assert T_toplot_2D[0] == 0.0
-                T_toplot_2D.append(30)
-                V_toplot_2D.append(V_toplot_2D[0])
-            if len(T_toplot_3D) == 1:
-                assert T_toplot_3D[0] == 0.0
-                T_toplot_3D.append(30)
-                V_toplot_3D.append(V_toplot_3D[0])
+
+            if T_toplot_2D[-1] < ENDFILE_SECONDS:
+                T_toplot_2D.append(ENDFILE_SECONDS)
+                V_toplot_2D.append(V_toplot_2D[-1])
+
+            if T_toplot_3D[-1] < ENDFILE_SECONDS:
+                T_toplot_3D.append(ENDFILE_SECONDS)
+                V_toplot_3D.append(V_toplot_3D[-1])
 
             interp_func_2D = interp1d(np.array(T_toplot_2D), np.array(V_toplot_2D), kind='linear', fill_value="extrapolate")
             interp_func_3D = interp1d(np.array(T_toplot_3D), np.array(V_toplot_3D), kind='linear', fill_value="extrapolate")
@@ -134,7 +140,10 @@ for participant in PARTICIPANTS:
             assert max(min(T_toplot_2D), min(T_toplot_3D)) < 0.1, 'Envelope {} for track {}, participant {} does not start at 0 but at {}'.format(name, track, participant, max(min(T_toplot_2D), min(T_toplot_3D)))
 
             t_min = max(min(T_toplot_2D), min(T_toplot_3D))
-            t_max = min(max(T_toplot_2D), max(T_toplot_3D))
+            assert t_min == 0.0
+            t_max = min(ENDFILE_SECONDS,max(T_toplot_2D), max(T_toplot_3D))
+
+            assert t_max == ENDFILE_SECONDS, 'Envelope {} for track {}, participant {} does not end at 30 but at {}'.format(name, track, participant, t_max)
 
             # print('Creating a common x-axis from {} to {}'.format(t_min, t_max))
             common_t = np.linspace(t_min, t_max, num=1000)  # 5000 points for high resolution
@@ -292,8 +301,7 @@ for participant in PARTICIPANTS:
             del v3D_resampled
             cur_results_automation['3D_DTW'] = v3D_DTW_resampled
 
-            ######
-
+            
             cur_results_automation['metrics'] = {}
             cur_results_automation['metrics']['description'] = 'Metrics computed:\n'
 
@@ -349,6 +357,81 @@ for participant in PARTICIPANTS:
         # plt.show()
         # exit()
 
+        assert 'Recording Trajectory X / ControlGris' in cur_results_track.keys()
+        assert 'Recording Trajectory Y / ControlGris' in cur_results_track.keys()
+        assert 'Recording Trajectory Z / ControlGris' in cur_results_track.keys()
+
+        
+        ### Compute motion metrics
+
+        #1. Displacement at each timestep
+        
+        for type in EXPERIMENT_TYPES:
+            # print('\n###\n%s\n###'%type)
+            x = np.array([float(e) for e in cur_results_track['Recording Trajectory X / ControlGris'][type]])
+            y = np.array([float(e) for e in cur_results_track['Recording Trajectory Y / ControlGris'][type]])
+            z = np.array([float(e) for e in cur_results_track['Recording Trajectory Z / ControlGris'][type]])
+            
+            # Number of time steps
+            N = len(x)
+            assert N == 1000
+            assert N == len(y) == len(z), 'Different lengths for x, y, z'
+
+            delta_t = ENDFILE_SECONDS / N
+
+            # 1. Displacement at each time step ti
+            displacements = np.sqrt((x[1:] - x[:-1])**2 + (y[1:] - y[:-1])**2 + (z[1:] - z[:-1])**2)
+
+
+            # 2. Velocity at each time step ti
+            velocities = displacements / delta_t
+
+            # 3. Acceleration at each time step ti
+            accelerations = (velocities[1:] - velocities[:-1]) / delta_t
+
+            # 4. Total Quantity of Motion (QoM) over N time steps
+            QoM = np.sum(displacements)
+
+            # 5. Total Quantity of Velocity (QoV) over N time steps
+            QoV = np.sum(velocities)
+
+            # 6. Total Quantity of Acceleration (QoA) over N time steps
+            QoA = np.sum(accelerations)
+
+            # Output the calculated quantities
+            # print(f"Total Quantity of Motion (QoM): {QoM}")
+            # print(f"Total Quantity of Velocity (QoV): {QoV}")
+            # print(f"Total Quantity of Acceleration (QoA): {QoA}")
+
+            cur_results_track[type] = {}
+            cur_results_track[type]['QoM'] = QoM
+            cur_results_track[type]['QoV'] = QoV
+            cur_results_track[type]['QoA'] = QoA
+
+    for type in EXPERIMENT_TYPES:
+        print('  Experiment type',type)
+        
+        typeQoMs = [cur_results[track][type]['QoM'] for track in all_tracks]
+        typeQoVs = [cur_results[track][type]['QoV'] for track in all_tracks]
+        typeQoAs = [cur_results[track][type]['QoA'] for track in all_tracks]
+
+        # Averages
+        avgQoM = np.mean(typeQoMs)
+        avgQoV = np.mean(typeQoVs)
+        avgQoA = np.mean(typeQoAs)
+
+        # Standard deviations
+        stdQoM = np.std(typeQoMs)
+        stdQoV = np.std(typeQoVs)
+        stdQoA = np.std(typeQoAs)
+
+        cur_results['averages'] = {}
+        cur_results['averages'][type] = {}
+        cur_results['averages'][type]['QoM'] = avgQoM
+        cur_results['averages'][type]['QoV'] = avgQoV
+        cur_results['averages'][type]['QoA'] = avgQoA
+        
+
 
 
 for participant in PARTICIPANTS:
@@ -356,8 +439,9 @@ for participant in PARTICIPANTS:
     for track in results[participant]:
         print('  Track',track)
         for automation in results[participant][track]:
-            print('    Automation',automation)
-            print('      Metrics:',results[participant][track][automation]['metrics']['description'].replace('\n','\n        '))
+            if 'metrics' in results[participant][track][automation].keys():
+                print('    Automation',automation)
+                print('      Metrics:',results[participant][track][automation]['metrics']['description'].replace('\n','\n        '))
 
 # save results as pickle
 with open('results_and_resampled_data.pickle', 'wb') as f:
