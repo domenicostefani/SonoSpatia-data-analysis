@@ -10,18 +10,21 @@ if not os.path.exists('plots'):
 
 with open(pickle_file, 'rb') as f:
     data = pickle.load(f)
-
-
+ALLTRACKS = ['Percussions (ID1)','Xylophone (ID3)', 'Texture (ID5)', 'Brass (ID7)', 'Voice (ID9)']
+ALL_AUTOMATIONS = ['Recording Trajectory X / ControlGris', 'Recording Trajectory Y / ControlGris', 'Recording Trajectory Z / ControlGris']
 
 ###
 # Variability per axis 
 
-
 for participant in data:
-    for track in data[participant]:
-        for automation in data[participant][track]:
+    assert np.all([track in data[participant] for track in ALLTRACKS]), 'Not all tracks found for participant %s'%participant
+    for track in ALLTRACKS:
+        assert np.all([automation in data[participant][track] for automation in ALL_AUTOMATIONS]), 'Not all automations found for participant %s and track %s'%(participant, track)
+        for automation in ALL_AUTOMATIONS:
+            assert '2D' in data[participant][track][automation], '2D not found in data (%s)'%data[participant][track][automation].keys()
+            assert '3D_DTW' in data[participant][track][automation], '3D_DTW not found in data (%s)'%data[participant][track][automation].keys()
             _2D_mean_stdev = (np.mean(data[participant][track][automation]['2D']), np.std(data[participant][track][automation]['2D']))
-            _3D_mean_stdev = (np.mean(data[participant][track][automation]['3D']), np.std(data[participant][track][automation]['3D']))
+            _3D_mean_stdev = (np.mean(data[participant][track][automation]['3D_DTW']), np.std(data[participant][track][automation]['3D_DTW']))
             print(f'Participant {participant} - Track {track} - Automation {automation} - 2D mean/stdev: {_2D_mean_stdev} - 3D mean/stdev: {_3D_mean_stdev}')
 
 PARTICIPANTS = list(data.keys())
@@ -38,19 +41,18 @@ for i, participant in enumerate(PARTICIPANTS):
     means_3D = []
     stdevs_3D = []
 
-
     trackAvg2D = [1,1,1]
     trackSD2D = [1,1,1]
     trackAvg3D = [1,1,1]
     trackSD3D = [1,1,1]
     automationlens = [0,0,0]
-    for track in data[participant]:
-        for aidx, automation in enumerate(data[participant][track]):
+    for track in ALLTRACKS:
+        for aidx, automation in enumerate(ALL_AUTOMATIONS):
             automationlens[aidx] += 1
             trackAvg2D[aidx] += np.mean(data[participant][track][automation]['2D'])
             trackSD2D[aidx] += np.std(data[participant][track][automation]['2D'])
-            trackAvg3D[aidx] += np.mean(data[participant][track][automation]['3D'])
-            trackSD3D[aidx] += np.std(data[participant][track][automation]['3D'])
+            trackAvg3D[aidx] += np.mean(data[participant][track][automation]['3D_DTW'])
+            trackSD3D[aidx] += np.std(data[participant][track][automation]['3D_DTW'])
     for aidx in range(3):
         trackAvg2D[aidx] /= automationlens[aidx]
         trackSD2D[aidx] /= automationlens[aidx]

@@ -11,7 +11,8 @@ import pandas as pd
 # DATA_3D_TO_USE = '3D_old_noDTW'
 DATA_3D_TO_USE = '3D_DTW'
 
-
+ALLTRACKS = ['Percussions (ID1)','Xylophone (ID3)', 'Texture (ID5)', 'Brass (ID7)', 'Voice (ID9)']
+ALLAUTOMATIONS = ['Recording Trajectory X / ControlGris', 'Recording Trajectory Y / ControlGris', 'Recording Trajectory Z / ControlGris']
 
 
 
@@ -47,10 +48,14 @@ if PARALLEL_PCA:
         cur_15D_data2D = pd.DataFrame()
         cur_15D_data3D = pd.DataFrame()
 
-        for cur_track in data[cur_player].keys():
+        assert np.all([track in data[cur_player] for track in ALLTRACKS]), 'Not all tracks found for participant %s'%cur_player
+
+        for cur_track in ALLTRACKS:
             print("\tTrack", cur_track)
             
-            for cur_dimension in data[cur_player][cur_track].keys():
+            assert np.all([automation in data[cur_player][cur_track] for automation in ALLAUTOMATIONS]), 'Not all automations found for participant %s and track %s'%(cur_player, cur_track)
+
+            for cur_dimension in ALLAUTOMATIONS:
                 assert cur_dimension in ['Recording Trajectory X / ControlGris', 'Recording Trajectory Y / ControlGris', 'Recording Trajectory Z / ControlGris'], 'Dimension not recognized'
                 
                 cur_dimensionstr = cur_dimension.replace('Recording Trajectory ', '').replace(' / ControlGris', '').strip()
