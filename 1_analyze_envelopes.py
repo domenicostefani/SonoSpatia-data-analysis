@@ -3,9 +3,14 @@ from utils import get_point_list_from_automation
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+import os
 
 EXPERIMENT_TYPES = ['2D', '3D_DTW','3D_old_noDTW']
 ENDFILE_SECONDS = 29.538 # End of task in seconds, throw away subsequent points
+MAX_ALLOWED_DTWSHIFT_SECONDS = 3.0 # Maximum allowed shift in seconds by DTW
+VERBOSE_MAXSHIFT = False
+DO_PLOT_DTW_PARTIAL = False
+DO_PLOT_DTW_PARTIAL_JUST_FIRST = False
 
 with open('extracted_envelopes.pickle', 'rb') as f:
     per_participant_automation_dict = pickle.load(f)
@@ -29,6 +34,7 @@ with open('extracted_envelopes.pickle', 'rb') as f:
 # list
 
 PARTICIPANTS = list(per_participant_automation_dict.keys())
+ALLTRACKS = ['Percussions (ID1)','Xylophone (ID3)', 'Texture (ID5)', 'Brass (ID7)', 'Voice (ID9)']
 
 
 # Sort by int id, not string. IDs are of the form ID1, ID2, ..., ID12
@@ -36,17 +42,22 @@ PARTICIPANTS.sort(key=lambda x: int(x[2:]))
 
 results = {}
 # 
-for participant in PARTICIPANTS:
+max_dtw_shift = 0
+max_dtw_shift_info = None
+for partidx,participant in enumerate(PARTICIPANTS):
     print('Processing participant',participant)
     cur_automation_dict_2D = per_participant_automation_dict[participant]['2D']
     cur_automation_dict_3D = per_participant_automation_dict[participant]['3D']
 
     cur_results = results[participant] = {}
 
-    all_tracks = set(cur_automation_dict_2D.keys()).union(set(cur_automation_dict_3D.keys()))
-    assert len(all_tracks) == 5, 'Expected 5 tracks, found {}'.format(len(all_tracks))
+    assert all([track in cur_automation_dict_2D.keys() for track in ALLTRACKS]), 'Participant {} is missing some tracks in 2D dict'.format(participant)
+    assert all([track in cur_automation_dict_3D.keys() for track in ALLTRACKS]), 'Participant {} is missing some tracks in 3D dict'.format(participant)
+    # all_tracks = set(cur_automation_dict_2D.keys()).union(set(cur_automation_dict_3D.keys()))
+    # assert len(all_tracks) == 5, 'Expected 5 tracks, found {}'.format(len(all_tracks))
+    all_tracks = ALLTRACKS
 
-    for track in all_tracks: #cur_automation_dict_2D:
+    for tidx,track in enumerate(all_tracks): #cur_automation_dict_2D:
 
         cur_results_track = cur_results[track] = {}
 
@@ -229,42 +240,117 @@ for participant in PARTICIPANTS:
                 exit(1)
 
 
-            DO_PLOT_DTW_PARTIAL = False
 
             query = np.array(v2D_resampled)
             template = np.array(v3D_resampled)
 
             from dtw import *
-            alignment = dtw(query, template, keep_internals=True)
 
-            if DO_PLOT_DTW_PARTIAL:
-                ## Display the warping curve, i.e. the alignment curve
-                alignment.plot(type="threeway")
+            is_first = partidx == 0 and tidx == 0 and automation_idx == 0
+
+            # if DO_PLOT_DTW_PARTIAL:
+            #     if (DO_PLOT_DTW_PARTIAL_JUST_FIRST and is_first) or not DO_PLOT_DTW_PARTIAL_JUST_FIRST:
+            #         ## Display the warping curve, i.e. the alignment curve
+            #         alignment.plot(type="threeway")
 
             ## Align and plot with the Rabiner-Juang type VI-c unsmoothed recursion
-            dtw_alignment = dtw(query, template, keep_internals=True, step_pattern=rabinerJuangStepPattern(6, "c"))
+            assert len(query) == len(template), 'Query and template must have the same length'
+            assert len(query) == 1000, 'Query and template must have 1000 points'
+            # dtw_alignment = dtw(query, template, keep_internals=True, step_pattern=rabinerJuangStepPattern(6, "c"))
+            # dtw_alignment = dtw(query, template, keep_internals=True, window_type="sakoechiba", window_args={'window_size': 0.001})
+
+            index_to_time = lambda idx: common_t[int(idx)]
+            time_to_index = lambda time: np.argmin(np.abs(common_t - time))
             
-            # plt.plot(alignment.index1, alignment.index2)  
-            # plt.xlabel('DTW 2D automation index')
-            # plt.ylabel('DTW 3D automation index')
-            # plt.show()
-            # index1 = [int(e) for e in list(dtw_alignment.index1)]
-            # index2 = [int(e) for e in list(dtw_alignment.index2)]
-            # print('dtw_alignment.index1',index1)
-            # # print('dtw_alignment.index2',list(dtw_alignment.index2))
 
-            # plt.plot(query)  # 2D
-            # plt.plot(template)  # 3D
-            # plt.show()
+            max_allowed_dtwdhift_inindexes = time_to_index(MAX_ALLOWED_DTWSHIFT_SECONDS)
 
+            # dtw_alignment = dtw(query, template, keep_internals=True, window_type="sakoechiba", window_args={'window_size': float(max_allowed_dtwdhift_inindexes)})
+            dtw_alignment = dtw(query,
+                                template,
+                                keep_internals=True,
+                                step_pattern=rabinerJuangStepPattern(6, "c"),
+                                window_type="sakoechiba",
+                                window_args={'window_size': float(max_allowed_dtwdhift_inindexes)})
+                                # window_args={'window_size': 10})
+            
 
             if DO_PLOT_DTW_PARTIAL:
-                dtw_alignment.plot(type="twoway",offset=-2)
-                ## See the recursion relation, as formula and diagram
-                print(rabinerJuangStepPattern(6,"c"))
-                rabinerJuangStepPattern(6,"c").plot()
+                if (DO_PLOT_DTW_PARTIAL_JUST_FIRST and is_first) or not DO_PLOT_DTW_PARTIAL_JUST_FIRST:
+                    
+                    dtw_alignment.plot(type="twoway",offset=-2)
 
-                plt.show()
+                    # print('maxtime',max(common_t))
+                    # reconvert 0-1000 index to time (0-30s ~)
+                    
+                    # print('index_to_time(0)',index_to_time(0))
+
+                    # Desired ticks show labels every X seconds and one for last mark which is float
+                    desired_ticks = np.arange(0, max(common_t), 5)
+                    if desired_ticks[-1] < max(common_t):
+                        desired_ticks = np.append(desired_ticks, max(common_t))
+                    # print('desired_ticks (%d):'%len(desired_ticks),desired_ticks)
+                    xticks = [time_to_index(e) for e in desired_ticks]
+                    # print('xticks (%d):'%len(xticks),xticks)
+
+                    xticklabels = [str(e) for e in desired_ticks]
+                    plt.xticks(xticks, xticklabels)
+                    
+                    ### Compute here the maximum shift applied by DTW
+                    cur_maxshift_raw = max(abs(dtw_alignment.index1 - dtw_alignment.index2))
+                    cur_maxshift_pos = -1
+                    cur_maxshift_pos2 = -1
+                    for i in range(len(dtw_alignment.index1)):
+                        if abs(dtw_alignment.index1[i] - dtw_alignment.index2[i]) == cur_maxshift_raw:
+                            cur_maxshift_pos = dtw_alignment.index1[i]
+                            cur_maxshift_pos2 = dtw_alignment.index2[i]
+                            break
+
+                    # vertical line at max shift position
+                    plt.axvline(x=cur_maxshift_pos, color='r', linestyle='--')
+                    plt.axvline(x=cur_maxshift_pos2, color='r', linestyle='--')
+
+                    assert cur_maxshift_pos != -1, 'Max shift position not found'
+
+                    print('cur_maxshift_raw: ',cur_maxshift_raw)
+                    print('cur_maxshift_pos: ',cur_maxshift_pos)
+                    
+
+                    # ensure index1 is always <= len(common_t) and index2 is always <= len(common_t)
+                    assert max(dtw_alignment.index1) <= len(common_t), 'Max index1 is greater than length of common_t, (%f > %f)'%(max(dtw_alignment.index1), len(common_t))
+                    assert max(dtw_alignment.index2) <= len(common_t), 'Max index2 is greater than length of common_t, (%f > %f)'%(max(dtw_alignment.index2), len(common_t))
+                    assert min(dtw_alignment.index1) >= 0, 'Min index1 is less than 0, (%f < 0)'%(min(dtw_alignment.index1))
+                    assert min(dtw_alignment.index2) >= 0, 'Min index2 is less than 0, (%f < 0)'%(min(dtw_alignment.index2))
+
+
+                    assert cur_maxshift_raw <= len(common_t), 'Max shift index is greater than length of common_t, (%f > %f)'%(cur_maxshift_raw, len(common_t))
+                    assert cur_maxshift_pos <= len(common_t), 'Max shift position index is greater than length of common_t (%f > %f)'%(cur_maxshift_pos, len(common_t))
+                    print('Max shift:',cur_maxshift_raw)
+                    cur_maxshift_s = float(cur_maxshift_raw * (ENDFILE_SECONDS / len(common_t)))
+                    if cur_maxshift_s > max_dtw_shift:
+                        max_dtw_shift = cur_maxshift_s
+                        max_dtw_shift_info =  {'participant':participant,
+                                               'track':track,
+                                               'automation':name,
+                                               'max_shift_seconds':cur_maxshift_s,
+                                               'max_shift_position_seconds':float(index_to_time(cur_maxshift_pos)),
+                                               'max_shift_index':int(cur_maxshift_raw),
+                                               'max_shift_position_index':int(cur_maxshift_pos)}
+                    if VERBOSE_MAXSHIFT:
+                        print('Max shift in seconds: %.2f'%cur_maxshift_s)
+                        print('max_shift_position_seconds: %.2f'%float(index_to_time(cur_maxshift_pos)))
+                    plt.title('DTW alignment,\nplayer %s, track %s,\nautomation %s\n MaxShift:%.1f s at mark %.1fs'%(participant, track, name,cur_maxshift_s, float(index_to_time(cur_maxshift_pos))))
+
+                    # exit()
+
+                    plotdir = 'plots/dtw/'
+                    if is_first and not os.path.exists(plotdir):
+                        os.makedirs(plotdir)
+                    plotfname = ('dtw_alignment_%s_%s_%s.png'%(participant, track, name)).replace(' ','_').replace('/','_').replace('(','_').replace(')','_')
+                    plotfname = os.path.join(plotdir, plotfname)
+                    plt.savefig(plotfname, bbox_inches='tight')
+                    plt.close()
+                    # plt.show()
 
             # After DTW we resample the 3D automation
             # But we make sure to reconvert 0-1000 index to time (0-30s ~)
@@ -448,3 +534,6 @@ with open('results_and_resampled_data.pickle', 'wb') as f:
     pickle.dump(results, f)
 
             
+if not DO_PLOT_DTW_PARTIAL:
+    print('The maximum time shift applied by DTW was:',max_dtw_shift,'seconds')
+    print('Info:',max_dtw_shift_info)
