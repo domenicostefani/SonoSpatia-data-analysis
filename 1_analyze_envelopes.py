@@ -9,7 +9,7 @@ EXPERIMENT_TYPES = ['2D', '3D_DTW','3D_old_noDTW']
 ENDFILE_SECONDS = 29.538 # End of task in seconds, throw away subsequent points
 MAX_ALLOWED_DTWSHIFT_SECONDS = 3.0 # Maximum allowed shift in seconds by DTW
 VERBOSE_MAXSHIFT = False
-DO_PLOT_DTW_PARTIAL = False
+DO_PLOT_DTW_PARTIAL = True
 DO_PLOT_DTW_PARTIAL_JUST_FIRST = False
 
 with open('extracted_envelopes.pickle', 'rb') as f:
@@ -278,7 +278,8 @@ for partidx,participant in enumerate(PARTICIPANTS):
             if DO_PLOT_DTW_PARTIAL:
                 if (DO_PLOT_DTW_PARTIAL_JUST_FIRST and is_first) or not DO_PLOT_DTW_PARTIAL_JUST_FIRST:
                     
-                    dtw_alignment.plot(type="twoway",offset=-2)
+                    OFFSET = -2
+                    dtw_alignment.plot(type="twoway",offset=OFFSET)
 
                     # print('maxtime',max(common_t))
                     # reconvert 0-1000 index to time (0-30s ~)
@@ -307,9 +308,19 @@ for partidx,participant in enumerate(PARTICIPANTS):
                             break
 
                     # vertical line at max shift position
-                    plt.axvline(x=cur_maxshift_pos, color='r', linestyle='--')
-                    plt.axvline(x=cur_maxshift_pos2, color='r', linestyle='--')
+                    plt.axvline(x=cur_maxshift_pos, color='gray', alpha=0.5)
+                    plt.axvline(x=cur_maxshift_pos2, color='gray', alpha=0.5)
 
+                    point1 = (cur_maxshift_pos, query[cur_maxshift_pos]-OFFSET)
+                    point2 = (cur_maxshift_pos2, template[cur_maxshift_pos2])
+                    # plt.axhline(y=point1[1], color='r', linestyle='--')
+                    # plt.axhline(y=point2[1], color='r', linestyle='--')
+                    
+                    plt.plot([point1[0], point2[0]], [point1[1], point2[1]], 'r--')
+                    # Add also circles
+                    plt.plot(point1[0], point1[1], 'ro')
+                    plt.plot(point2[0], point2[1], 'ro')
+                    
                     assert cur_maxshift_pos != -1, 'Max shift position not found'
 
                     print('cur_maxshift_raw: ',cur_maxshift_raw)
@@ -346,11 +357,13 @@ for partidx,participant in enumerate(PARTICIPANTS):
                     plotdir = 'plots/dtw/'
                     if is_first and not os.path.exists(plotdir):
                         os.makedirs(plotdir)
-                    plotfname = ('dtw_alignment_%s_%s_%s.png'%(participant, track, name)).replace(' ','_').replace('/','_').replace('(','_').replace(')','_')
+                    plotfname = ('dtw_alignment_%s_%s_%s.jpg'%(participant, track, name)).replace(' ','_').replace('/','_').replace('(','_').replace(')','_')
                     plotfname = os.path.join(plotdir, plotfname)
                     plt.savefig(plotfname, bbox_inches='tight')
-                    plt.close()
                     # plt.show()
+                    plt.close()
+                    # exit()
+
 
             # After DTW we resample the 3D automation
             # But we make sure to reconvert 0-1000 index to time (0-30s ~)
