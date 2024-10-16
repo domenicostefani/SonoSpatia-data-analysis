@@ -1,0 +1,25 @@
+﻿Participant,Condition,play/stop,select track,draw trajectory,clear automation,change timeslider
+P1,VR,10,11,14,0,7
+P1,DAW,3,5,5,0,0
+P2,DAW,9,4,10,0,1
+P2,VR,4,8,6,1,0
+P3,VR,18,11,9,3,0
+P3,DAW,1,6,9,0,0
+P4,DAW,33,19,14,3,0
+P4,VR,7,13,15,13,2
+P5,VR,13,7,27,5,29
+P5,DAW,8,0,30,0,3
+P6,DAW,16,14,29,9,8
+P6,VR,22,7,60,3,70
+P7,VR,4,7,18,5,7
+P7,DAW,7,6,9,0,2
+P8,DAW,7,10,9,5,0
+P8,VR,1,8,6,1,0
+P9,VR,18,13,11,3,3
+P9,DAW,8,9,10,2,0
+P10,DAW,17,22,14,1,1
+P10,VR,18,30,18,3,0
+P11,VR,6,7,12,1,6
+P11,DAW,11,7,8,0,0
+P12,DAW,7,15,12,5,1
+P12,VR,4,7,10,2,0
